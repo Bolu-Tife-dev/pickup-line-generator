@@ -6,54 +6,174 @@ import { OpenAI } from "openai";
 import { FallbackOutputSchema, OutputSchema } from "../schema";
 import { rateLimiter } from "../upstash";
 import { parseFormData, parsePickupLineTexts } from "../utils";
-import { experimentPrompt, promptInstructions } from "./instructions";
+import {
+  chatAnalysisFallbackPrompt,
+  chatAnalysisInstructions,
+  experimentPrompt,
+  promptInstructions,
+} from "./instructions";
 
-// Groq Inference (free tier) — primary LLM, OpenAI-compatible endpoint
-const groq = new OpenAI({
-  baseURL: "https://api.groq.com/openai/v1",
-  apiKey: process.env.GROQ_API_KEY!,
-});
+// Export runtime budget for Vercel (vision calls can take a while)
 
-// Google Gemini (free tier via AI Studio) — OpenAI-compatible fallback endpoint
+// Google Gemini (free tier via AI Studio) — OpenAI-compatible endpoint,
+// used for BOTH vision (chat screenshot analysis) and text fallback
 const gemini = new OpenAI({
   baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
   apiKey: process.env.GEMINI_API_KEY!,
 });
 
-//  Instructor for returning structured JSON
+// Groq (free tier) — fast text-only fallback when no images are attached
+const groq = new OpenAI({
+  baseURL: "https://api.groq.com/openai/v1",
+  apiKey: process.env.GROQ_API_KEY!,
+});
+
+// Instructor for returning structured JSON
 const client = Instructor({
-  client: groq,
+  client: gemini,
   mode: "JSON_SCHEMA",
 });
 
+function parseChatFrames(chatFrames?: string): string[] {
+  if (!chatFrames) return [];
+  try {
+    const parsed = JSON.parse(chatFrames);
+    if (
+      Array.isArray(parsed) &&
+      parsed.every(
+        (f) => typeof f === "string" && f.startsWith("data:image/"),
+      )
+    ) {
+      return parsed as string[];
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+type VisionContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
+type VisionMessage = {
+  role: "system" | "user" | "assistant";
+  content: string | VisionContentPart[];
+};
+
+function buildVisionMessages(
+  frames: string[],
+  note?: string,
+): VisionMessage[] {
+  const userNote = note?.trim()
+    ? `\nExtra context from the user: "${note.trim().slice(0, 500)}"`
+    : "";
+  return [
+    {
+      role: "system",
+      content: chatAnalysisInstructions,
+    },
+    {
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: `Here ${frames.length === 1 ? "is 1 screenshot" : `are ${frames.length} frames`} of my chat conversation. Analyze it and write my perfect next message as described.${userNote}`,
+        },
+        ...frames.map((dataUrl) => ({
+          type: "image_url" as const,
+          image_url: { url: dataUrl },
+        })),
+      ],
+    },
+  ];
+}
+
+// IMAGE MODE — screenshot / screen recording analysis (primary, structured)
+async function analyzeChatAndGenerate(
+  frames: string[],
+  note?: string,
+): Promise<string[]> {
+  const PickupLines = await client.chat.completions.create({
+    model: "gemini-3.1-flash-lite",
+    messages: buildVisionMessages(frames, note),
+    response_model: { schema: OutputSchema, name: "PickupLines" },
+    max_tokens: 2000,
+    max_retries: 2,
+    temperature: 1,
+  });
+  return parsePickupLineTexts(PickupLines);
+}
+
+// IMAGE MODE — raw fallback (manual JSON parse + validation)
+async function fallbackAnalyzeChat(
+  frames: string[],
+  note?: string,
+): Promise<string[]> {
+  const messages = [
+    {
+      role: "system" as const,
+      content:
+        "Given the attached images, you will return fully valid JSON based on the description below. You will return no other prose. Return a valid and fully escaped JSON object that matches the schema.",
+    },
+    {
+      role: "system" as const,
+      content: chatAnalysisFallbackPrompt,
+    },
+    ...buildVisionMessages(frames, note).slice(1),
+  ];
+  const response = await gemini.chat.completions.create({
+    model: "gemini-3.1-flash-lite",
+    // The OpenAI v4 types are stricter than Gemini's OpenAI-compatible API
+    // eslint-disable-next-line
+    messages: messages as any,
+    response_format: { type: "json_object" },
+    max_tokens: 2000,
+    temperature: 1.2,
+    top_p: 1,
+  });
+  try {
+    const parsedJson = JSON.parse(response.choices[0].message.content!);
+    const pickupLines = FallbackOutputSchema.parse(parsedJson);
+    return pickupLines.pickupLines;
+  } catch (error) {
+    throw new Error(
+      "Try Again - Error parsing JSON response from fallback API",
+    );
+  }
+}
+
+// TEXT MODE — no screenshot, optional note only (primary: Groq, free + fast)
 async function generatePickupLines(
   formData: FormInputProps,
 ): Promise<string[]> {
-  // call the LLM API to generate the pickup lines
-
-  const PickupLines = await client.chat.completions.create({
+  const note = formData.crushDescription?.trim() || "";
+  const direct = await groq.chat.completions.create({
     model: "openai/gpt-oss-120b",
     messages: [
       { role: "system", content: promptInstructions },
       {
         role: "user",
-        content: `Description of my crush: ${formData.crushDescription}\nStyle of pickup lines: ${formData.style}`,
+        content: `Description of my crush: ${note}\nStyle of pickup lines: ${
+          formData.style || "natural to the context"
+        }`,
       },
     ],
-    response_model: { schema: OutputSchema, name: "PickupLines" },
+    response_format: { type: "json_object" },
     max_tokens: 4000,
-    max_retries: 3,
     temperature: 1,
   });
-
-  // parse the pickup line texts from the data
-  return parsePickupLineTexts(PickupLines);
+  const parsed = FallbackOutputSchema.parse(
+    JSON.parse(direct.choices[0].message.content!),
+  );
+  return parsed.pickupLines;
 }
 
-// Gemini fallback (raw JSON mode, parsed + validated manually)
+// TEXT MODE — Gemini fallback (raw JSON mode, parsed + validated manually)
 async function fallbackGeneratePickupLines(
   formData: FormInputProps,
 ): Promise<string[]> {
+  const note = formData.crushDescription?.trim() || "";
   const response = await gemini.chat.completions.create({
     model: "gemini-3.1-flash-lite",
     messages: [
@@ -71,11 +191,13 @@ async function fallbackGeneratePickupLines(
       { role: "system", content: experimentPrompt },
       {
         role: "user",
-        content: `Description of my crush: ${formData.crushDescription}\nStyle of pickup lines: ${formData.style}`,
+        content: `Description of my crush: ${note}\nStyle of pickup lines: ${
+          formData.style || "natural to the context"
+        }`,
       },
     ],
     response_format: { type: "json_object" },
-    max_tokens: 1000,
+    max_tokens: 2000,
     temperature: 1.5,
     top_p: 1,
     frequency_penalty: 0.6,
@@ -91,32 +213,36 @@ async function fallbackGeneratePickupLines(
   }
 }
 
-// Generate pickup lines with fallback
+// Route to the right pipeline based on the presence of chat screenshots
 async function generatePickupLinesWithFallback(
   params: GenerationParams,
 ): Promise<string[]> {
-  const timeoutPromise = setTimeout(5000).then(() => {
-    throw new Error(
-      "Request timed out - Third party API Endpoints may be experiencing issues",
-    );
-  });
+  const frames = parseChatFrames(params.initialFormState.chatFrames);
+  const inImageMode = frames.length > 0;
 
-  const generatePromise = generatePickupLines(params.initialFormState);
-  const fallbackPromise = fallbackGeneratePickupLines(params.initialFormState);
+  const primaryPromise = !inImageMode
+    ? generatePickupLines(params.initialFormState)
+    : analyzeChatAndGenerate(
+        frames,
+        params.initialFormState.crushDescription,
+      );
+  const fallbackPromise = !inImageMode
+    ? fallbackGeneratePickupLines(params.initialFormState)
+    : fallbackAnalyzeChat(frames, params.initialFormState.crushDescription);
 
   try {
     // First, try to get results from the main function
-    const result = await Promise.race([generatePromise, timeoutPromise]);
+    const result = await primaryPromise;
     if (Array.isArray(result) && result.length > 0) {
       return result;
     }
   } catch (error) {
-    // If main function fails or times out, we'll continue to the fallback
-    console.log("Main function failed or timed out, trying fallback");
+    // If main function fails, we'll continue to the fallback
+    console.log("Main function failed, trying fallback");
   }
 
   // If we're here, it means the main function didn't succeed, so we'll use the fallback
-  const fallbackResult = await Promise.race([fallbackPromise, timeoutPromise]);
+  const fallbackResult = await fallbackPromise;
 
   if (
     !fallbackResult ||

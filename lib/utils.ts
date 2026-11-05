@@ -21,8 +21,8 @@ export const copyToClipboard = (text: string) => {
 
 export function parseFormData(formData: FormData) {
   return FormSchema.safeParse({
+    chatFrames: formData.get("chatFrames"),
     crushDescription: formData.get("crushDescription"),
-    style: formData.get("style"),
   });
 }
 

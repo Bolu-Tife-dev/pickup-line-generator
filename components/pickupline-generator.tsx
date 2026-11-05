@@ -4,7 +4,7 @@ import { generateOutput } from "@/lib/ai/actions";
 import { cn } from "@/lib/utils";
 import React from "react";
 import { useFormState } from "react-dom";
-import PickupLineInputForm from "./pickupline-generator/input-form";
+import ChatUploadForm from "./pickupline-generator/chat-upload-form";
 import OutputForm from "./pickupline-generator/output-form";
 
 const initialState: GenerateOutputState = { message: "" };
@@ -17,17 +17,23 @@ function PickupLineGenerator() {
       <h1
         className={cn(
           "text-3xl leading-tight md:text-5xl",
-          !state.message ? "mb-4" : "mb-8",
+          !state.message ? "mb-1" : "mb-8",
         )}
       >
         Pickup Line Generator
       </h1>
       {!state.pickupLines ? (
-        <PickupLineInputForm
-          formAction={formAction}
-          message={state.message}
-          error={state.errors}
-        />
+        <>
+          <p className="mb-4 text-base text-[#A5455C]/80 md:text-lg">
+            Upload a screenshot or screen recording of your chat — the AI will
+            read the vibe and write the perfect reply.
+          </p>
+          <ChatUploadForm
+            formAction={formAction}
+            message={state.message}
+            error={state.errors}
+          />
+        </>
       ) : (
         <OutputForm
           pickupLines={state.pickupLines}

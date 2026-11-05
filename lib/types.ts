@@ -1,6 +1,9 @@
 interface FormInputProps {
-  style: string;
-  crushDescription: string;
+  // JSON string of base64 data-URLs (client-extracted frames from a chat
+  // screenshot/screen recording); empty in text-only mode
+  chatFrames?: string;
+  crushDescription?: string;
+  style?: string;
 }
 
 interface GenerationParams {
@@ -12,6 +15,7 @@ interface GenerateButtonProps {
   text?: string;
   isServerAction?: boolean;
   pending?: boolean;
+  disabled?: boolean;
   formAction?: (formData: FormData) => void | ((payload: FormData) => void);
 }
 

@@ -5,9 +5,11 @@ import GenerateButton from "./generate-cta-button";
 function GenerateFormButton({
   text,
   formAction,
+  disabled,
 }: {
   text?: string;
   formAction?: (payload: FormData) => void;
+  disabled?: boolean;
 }) {
   const { pending } = useFormStatus();
   return (
@@ -17,6 +19,7 @@ function GenerateFormButton({
       formAction={formAction}
       text={text}
       isServerAction
+      disabled={disabled || pending}
     />
   );
 }

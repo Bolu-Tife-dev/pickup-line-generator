@@ -4,6 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import Image from "next/image";
 import { redirect } from "next/navigation";
 
+// Vision calls can take a while — extend the Vercel function budget
+export const maxDuration = 60;
+
 export default async function Page() {
   const supabase = createClient();
 
