@@ -12,7 +12,7 @@ export default async function Page() {
     redirect("/login");
   }
   return (
-    <div className="flex flex-col items-center justify-center">
+    <div className="flex min-h-dvh flex-col items-center justify-center">
       <div className="absolute inset-0">
         <Image
           src="/background.png"
@@ -23,13 +23,14 @@ export default async function Page() {
           priority
         />
       </div>
-      <div className="relative z-10 flex w-full flex-col items-center justify-center p-8 text-center">
-        <SignOutButton />
-        <PickupLineGenerator />
-      </div>
 
       {/* Semi-transparent overlay to ensure text readability */}
       <div className="absolute inset-0 bg-white bg-opacity-90"></div>
+
+      <div className="relative z-10 flex w-full flex-col items-center justify-center px-safe pt-safe pb-safe p-8 text-center">
+        <SignOutButton />
+        <PickupLineGenerator />
+      </div>
     </div>
   );
 }

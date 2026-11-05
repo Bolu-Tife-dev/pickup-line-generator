@@ -8,31 +8,31 @@ import { rateLimiter } from "../upstash";
 import { parseFormData, parsePickupLineTexts } from "../utils";
 import { experimentPrompt, promptInstructions } from "./instructions";
 
-// Anyscale Inference for Mixtral (LLM)
-const anyscale = new OpenAI({
-  baseURL: "https://api.endpoints.anyscale.com/v1",
-  apiKey: process.env.ANYSCALE_API_KEY!,
+// Groq Inference (free tier) — primary LLM, OpenAI-compatible endpoint
+const groq = new OpenAI({
+  baseURL: "https://api.groq.com/openai/v1",
+  apiKey: process.env.GROQ_API_KEY!,
 });
 
-// Together Inference for Mixtral (LLM)
-const togetherai = new OpenAI({
-  baseURL: "https://api.together.xyz/v1",
-  apiKey: process.env.TOGETHERAI_API_KEY!,
+// Google Gemini (free tier via AI Studio) — OpenAI-compatible fallback endpoint
+const gemini = new OpenAI({
+  baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
+  apiKey: process.env.GEMINI_API_KEY!,
 });
 
 //  Instructor for returning structured JSON
 const client = Instructor({
-  client: togetherai,
+  client: groq,
   mode: "JSON_SCHEMA",
 });
 
 async function generatePickupLines(
   formData: FormInputProps,
 ): Promise<string[]> {
-  // call the Mixtral API to generate the pickup lines
+  // call the LLM API to generate the pickup lines
 
   const PickupLines = await client.chat.completions.create({
-    model: "mistralai/Mixtral-8x7B-Instruct-v0.1",
+    model: "openai/gpt-oss-120b",
     messages: [
       { role: "system", content: promptInstructions },
       {
@@ -41,7 +41,7 @@ async function generatePickupLines(
       },
     ],
     response_model: { schema: OutputSchema, name: "PickupLines" },
-    max_tokens: 1000,
+    max_tokens: 4000,
     max_retries: 3,
     temperature: 1,
   });
@@ -50,14 +50,12 @@ async function generatePickupLines(
   return parsePickupLineTexts(PickupLines);
 }
 
-// OpenAI Server Did not respond with JSON-Mode On
+// Gemini fallback (raw JSON mode, parsed + validated manually)
 async function fallbackGeneratePickupLines(
   formData: FormInputProps,
 ): Promise<string[]> {
-  // const jsonSchema = zodToJsonSchema(OutputSchema, "mySchema");
-
-  const response = await togetherai.chat.completions.create({
-    model: "mistralai/Mixtral-8x7B-Instruct-v0.1",
+  const response = await gemini.chat.completions.create({
+    model: "gemini-3.1-flash-lite",
     messages: [
       {
         role: "system",
@@ -76,9 +74,7 @@ async function fallbackGeneratePickupLines(
         content: `Description of my crush: ${formData.crushDescription}\nStyle of pickup lines: ${formData.style}`,
       },
     ],
-    // OpenAI not responding to "json_object" response format
-    // @ts-ignore – Together.ai supports schema while OpenAI does not
-    // response_format: { type: "json_object", schema: jsonSchema },
+    response_format: { type: "json_object" },
     max_tokens: 1000,
     temperature: 1.5,
     top_p: 1,

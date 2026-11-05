@@ -5,7 +5,7 @@ import React from "react";
 
 export default function Home() {
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[#FED8D8] md:bg-transparent p-4 md:p-0">
+    <main className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-[#FED8D8] md:bg-transparent p-4 md:p-0">
       <div className="absolute inset-0 hidden md:block">
         <Image
           src="/background.png"
@@ -17,7 +17,7 @@ export default function Home() {
         />
       </div>
 
-      {/* Mobile Design */}
+      {/* Mobile Design — dynamic viewport + safe areas for iPhone Safari/home screen */}
       <div className="relative w-full md:hidden">
         <Image
           src="/background.png"
@@ -27,7 +27,7 @@ export default function Home() {
           quality={100}
           priority
         />
-        <div className="relative -left-2 z-10 flex w-full flex-col items-center justify-center gap-16 p-8 text-center">
+        <div className="relative -left-2 z-10 flex w-full flex-col items-center justify-center gap-16 px-safe pt-safe pb-safe p-8 text-center">
           <div className="mb-12 mt-2">
             <h1 className="text-2xl leading-tight text-white">
               Pickup Line
@@ -35,7 +35,7 @@ export default function Home() {
               Generator
             </h1>
           </div>
-          <Link href="/generate">
+          <Link href="/generate" className="mb-24 block">
             <GenerateButton className="mb-24 w-[150px]" />
           </Link>
         </div>

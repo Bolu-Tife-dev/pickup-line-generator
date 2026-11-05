@@ -33,9 +33,17 @@ export async function updateSession(request: NextRequest) {
   // supabase.auth.getUser(). A simple mistake could make it very hard to debug
   // issues with users being randomly logged out.
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Resilient against transient Supabase outages — if auth can't be reached,
+  // fall through so the app shell (and PWA assets) still render instead of 500ing.
+  let user: { id: string } | null = null;
+  try {
+    const {
+      data: { user: supabaseUser },
+    } = await supabase.auth.getUser();
+    user = supabaseUser;
+  } catch {
+    user = null;
+  }
 
   if (
     !user &&
