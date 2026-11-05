@@ -1,0 +1,6 @@
+# Never upload local env files — Vercel env vars are the single source
+# of truth for the deployed app (prevents localhost values leaking in)
+.env
+.env.*
+!.env.example
+.vercel
