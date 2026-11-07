@@ -1,7 +1,7 @@
 /* Minimal service worker for Pickup Line Generator PWA.
    Keeps fast repeat opens on iOS home-screen (standalone) mode and
    serves an offline fallback page. */
-const VERSION = "v1";
+const VERSION = "v2";
 const STATIC_CACHE = `plg-static-${VERSION}`;
 const PAGES_CACHE = `plg-pages-${VERSION}`;
 const OFFLINE_URL = "/offline";
