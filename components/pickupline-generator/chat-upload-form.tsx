@@ -7,8 +7,8 @@ import { useState } from "react";
 import Image from "next/image";
 
 const MAX_FRAMES = 6;
-const MAX_EDGE = 720; // px on the long edge — keeps payloads well under limit
-const JPEG_QUALITY = 0.66;
+const MAX_EDGE = 640; // px on the long edge — smaller payload uploads faster on weak cellular
+const JPEG_QUALITY = 0.6;
 
 async function downscaleToJpegDataUrl(
   source: CanvasImageSource,
@@ -224,6 +224,11 @@ function ChatUploadForm({
         <GenerateFormButton
           text={frames.length > 0 ? "Write My Perfect Reply ✨" : undefined}
           disabled={extracting}
+          pendingHint={
+            frames.length > 0
+              ? "Reading your chat… this can take up to ~30s"
+              : "Writing your lines… up to ~15s"
+          }
         />
       </div>
     </form>

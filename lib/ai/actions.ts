@@ -13,16 +13,22 @@ import {
 // Export runtime budget for Vercel (vision calls can take a while)
 
 // Google Gemini (free tier via AI Studio) — OpenAI-compatible endpoint,
-// used for BOTH vision (chat screenshot analysis) and text fallback
+// used for BOTH vision (chat screenshot analysis) and text fallback.
+// timeout/maxRetries keep primary + fallback inside the 60s Vercel cap:
+// the OpenAI SDK's default 2 retries would otherwise blow past it.
 const gemini = new OpenAI({
   baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
   apiKey: process.env.GEMINI_API_KEY!,
+  timeout: 25000,
+  maxRetries: 0,
 });
 
 // Groq (free tier) — fast text-only fallback when no images are attached
 const groq = new OpenAI({
   baseURL: "https://api.groq.com/openai/v1",
   apiKey: process.env.GROQ_API_KEY!,
+  timeout: 25000,
+  maxRetries: 0,
 });
 
 function parseChatFrames(chatFrames?: string): string[] {
