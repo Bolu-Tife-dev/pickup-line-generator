@@ -96,6 +96,19 @@ async function extractFrames(file: File): Promise<string[]> {
   throw new Error("Please upload an image or a screen recording");
 }
 
+function errorDescription(error: unknown): string | undefined {
+  if (typeof error === "string") return error;
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object") {
+    // zod fieldErrors: { field: ["msg", ...] }
+    const values = Object.values(error as Record<string, unknown>)
+      .flat()
+      .filter((v): v is string => typeof v === "string" && v.length > 0);
+    if (values.length > 0) return values.join(" ");
+  }
+  return undefined;
+}
+
 function ChatUploadForm({
   formAction,
   message,
@@ -103,7 +116,7 @@ function ChatUploadForm({
 }: {
   formAction: (payload: FormData) => void;
   message?: string;
-  error?: string;
+  error?: unknown;
 }) {
   const [frames, setFrames] = useState<string[]>([]);
   const [extracting, setExtracting] = useState(false);
@@ -111,7 +124,7 @@ function ChatUploadForm({
 
   if (message === "error") {
     toast.error("Failed to generate. Please try again.", {
-      description: typeof error === "string" ? error : undefined,
+      description: errorDescription(error),
     });
   }
 

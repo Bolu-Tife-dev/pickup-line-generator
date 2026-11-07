@@ -20,9 +20,11 @@ export const copyToClipboard = (text: string) => {
 };
 
 export function parseFormData(formData: FormData) {
+  // FormData.get() returns null for absent fields — normalize to undefined so
+  // zod's .optional() accepts them (note-only submissions have no chatFrames).
   return FormSchema.safeParse({
-    chatFrames: formData.get("chatFrames"),
-    crushDescription: formData.get("crushDescription"),
+    chatFrames: formData.get("chatFrames") ?? undefined,
+    crushDescription: formData.get("crushDescription") ?? undefined,
   });
 }
 

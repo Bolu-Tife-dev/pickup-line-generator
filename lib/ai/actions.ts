@@ -1,11 +1,8 @@
 "use server";
 
-import { setTimeout } from "timers/promises";
-import Instructor from "@instructor-ai/instructor";
 import { OpenAI } from "openai";
-import { FallbackOutputSchema, OutputSchema } from "../schema";
 import { rateLimiter } from "../upstash";
-import { parseFormData, parsePickupLineTexts } from "../utils";
+import { parseFormData } from "../utils";
 import {
   chatAnalysisFallbackPrompt,
   chatAnalysisInstructions,
@@ -26,12 +23,6 @@ const gemini = new OpenAI({
 const groq = new OpenAI({
   baseURL: "https://api.groq.com/openai/v1",
   apiKey: process.env.GROQ_API_KEY!,
-});
-
-// Instructor for returning structured JSON
-const client = Instructor({
-  client: gemini,
-  mode: "JSON_SCHEMA",
 });
 
 function parseChatFrames(chatFrames?: string): string[] {
@@ -89,20 +80,50 @@ function buildVisionMessages(
   ];
 }
 
-// IMAGE MODE — screenshot / screen recording analysis (primary, structured)
+// Models drift between prompts: some return [{id,text}], some ["..."].
+// Accept both shapes everywhere and reduce to plain strings.
+function normalizePickupLines(data: unknown): string[] {
+  const arr = (data as { pickupLines?: unknown } | null)?.pickupLines;
+  if (!Array.isArray(arr)) {
+    throw new Error("Response is missing the pickupLines array");
+  }
+  const texts = arr
+    .map((item) => {
+      if (typeof item === "string") return item;
+      if (
+        item &&
+        typeof item === "object" &&
+        typeof (item as { text?: unknown }).text === "string"
+      ) {
+        return (item as { text: string }).text;
+      }
+      return null;
+    })
+    .filter((t): t is string => !!t && t.trim().length > 0);
+  if (texts.length === 0) {
+    throw new Error("Response contained no usable pickup lines");
+  }
+  return texts;
+}
+
+// IMAGE MODE — screenshot / screen recording analysis (primary).
+// Plain JSON mode: Gemini's OpenAI-compatible endpoint rejects the
+// json_object+schema combo that Instructor's JSON_SCHEMA mode sends (HTTP 400),
+// so ask for JSON directly and validate with the schema ourselves.
 async function analyzeChatAndGenerate(
   frames: string[],
   note?: string,
 ): Promise<string[]> {
-  const PickupLines = await client.chat.completions.create({
+  const response = await gemini.chat.completions.create({
     model: "gemini-3.1-flash-lite",
-    messages: buildVisionMessages(frames, note),
-    response_model: { schema: OutputSchema, name: "PickupLines" },
+    // The OpenAI v4 types are stricter than Gemini's OpenAI-compatible API
+    // eslint-disable-next-line
+    messages: buildVisionMessages(frames, note) as any,
+    response_format: { type: "json_object" },
     max_tokens: 2000,
-    max_retries: 2,
     temperature: 1,
   });
-  return parsePickupLineTexts(PickupLines);
+  return normalizePickupLines(JSON.parse(response.choices[0].message.content!));
 }
 
 // IMAGE MODE — raw fallback (manual JSON parse + validation)
@@ -134,8 +155,7 @@ async function fallbackAnalyzeChat(
   });
   try {
     const parsedJson = JSON.parse(response.choices[0].message.content!);
-    const pickupLines = FallbackOutputSchema.parse(parsedJson);
-    return pickupLines.pickupLines;
+    return normalizePickupLines(parsedJson);
   } catch (error) {
     throw new Error(
       "Try Again - Error parsing JSON response from fallback API",
@@ -163,10 +183,7 @@ async function generatePickupLines(
     max_tokens: 4000,
     temperature: 1,
   });
-  const parsed = FallbackOutputSchema.parse(
-    JSON.parse(direct.choices[0].message.content!),
-  );
-  return parsed.pickupLines;
+  return normalizePickupLines(JSON.parse(direct.choices[0].message.content!));
 }
 
 // TEXT MODE — Gemini fallback (raw JSON mode, parsed + validated manually)
@@ -199,13 +216,12 @@ async function fallbackGeneratePickupLines(
     response_format: { type: "json_object" },
     max_tokens: 2000,
     temperature: 1.5,
-    top_p: 1,
-    frequency_penalty: 0.6,
+    // NOTE: no frequency_penalty/top_p — Gemini's OpenAI-compatible endpoint
+    // rejects them with HTTP 400 (leftovers from the old Together AI days).
   });
   try {
     const parsedJson = JSON.parse(response.choices[0].message.content!);
-    const pickupLines = FallbackOutputSchema.parse(parsedJson);
-    return pickupLines.pickupLines;
+    return normalizePickupLines(parsedJson);
   } catch (error) {
     throw new Error(
       "Try Again - Error parsing JSON response from fallback API",
@@ -213,36 +229,36 @@ async function fallbackGeneratePickupLines(
   }
 }
 
-// Route to the right pipeline based on the presence of chat screenshots
+// Route to the right pipeline based on the presence of chat screenshots.
+// The fallback runs ONLY if the primary fails — launching it eagerly (as
+// before) wasted an API call on every success and logged unhandled
+// rejections when the eager fallback rejected first.
 async function generatePickupLinesWithFallback(
   params: GenerationParams,
 ): Promise<string[]> {
   const frames = parseChatFrames(params.initialFormState.chatFrames);
   const inImageMode = frames.length > 0;
 
-  const primaryPromise = !inImageMode
-    ? generatePickupLines(params.initialFormState)
-    : analyzeChatAndGenerate(
-        frames,
-        params.initialFormState.crushDescription,
-      );
-  const fallbackPromise = !inImageMode
-    ? fallbackGeneratePickupLines(params.initialFormState)
-    : fallbackAnalyzeChat(frames, params.initialFormState.crushDescription);
-
   try {
-    // First, try to get results from the main function
-    const result = await primaryPromise;
+    const result = inImageMode
+      ? await analyzeChatAndGenerate(
+          frames,
+          params.initialFormState.crushDescription,
+        )
+      : await generatePickupLines(params.initialFormState);
     if (Array.isArray(result) && result.length > 0) {
       return result;
     }
   } catch (error) {
-    // If main function fails, we'll continue to the fallback
-    console.log("Main function failed, trying fallback");
+    console.log(
+      "Main function failed, trying fallback:",
+      error instanceof Error ? error.message : error,
+    );
   }
 
-  // If we're here, it means the main function didn't succeed, so we'll use the fallback
-  const fallbackResult = await fallbackPromise;
+  const fallbackResult = inImageMode
+    ? await fallbackAnalyzeChat(frames, params.initialFormState.crushDescription)
+    : await fallbackGeneratePickupLines(params.initialFormState);
 
   if (
     !fallbackResult ||
