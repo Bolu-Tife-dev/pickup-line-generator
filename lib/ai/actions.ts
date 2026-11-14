@@ -112,6 +112,29 @@ function normalizePickupLines(data: unknown): string[] {
   return texts;
 }
 
+// The vibe block only exists in image mode — text mode has no chat to read.
+// Tolerant of model drift: accept a bare string, or the fields arriving as
+// 'tone'/'analysis' instead of 'mood'/'summary'.
+function extractVibe(data: unknown): ChatVibe | undefined {
+  const vibe = (data as { vibe?: unknown } | null)?.vibe;
+  let mood: unknown;
+  let summary: unknown;
+
+  if (typeof vibe === "string") {
+    mood = vibe;
+  } else if (vibe && typeof vibe === "object") {
+    const fields = vibe as { mood?: unknown; tone?: unknown; summary?: unknown; analysis?: unknown };
+    mood = fields.mood ?? fields.tone;
+    summary = fields.summary ?? fields.analysis;
+  }
+
+  const moodText = typeof mood === "string" ? mood.trim() : "";
+  const summaryText = typeof summary === "string" ? summary.trim() : "";
+
+  if (!moodText && !summaryText) return undefined;
+  return { mood: moodText || "Mixed", summary: summaryText };
+}
+
 // IMAGE MODE — screenshot / screen recording analysis (primary).
 // Plain JSON mode: Gemini's OpenAI-compatible endpoint rejects the
 // json_object+schema combo that Instructor's JSON_SCHEMA mode sends (HTTP 400),
@@ -119,7 +142,7 @@ function normalizePickupLines(data: unknown): string[] {
 async function analyzeChatAndGenerate(
   frames: string[],
   note?: string,
-): Promise<string[]> {
+): Promise<GenerationResult> {
   const response = await gemini.chat.completions.create({
     model: "gemini-3.1-flash-lite",
     // The OpenAI v4 types are stricter than Gemini's OpenAI-compatible API
@@ -129,14 +152,15 @@ async function analyzeChatAndGenerate(
     max_tokens: 2000,
     temperature: 1,
   });
-  return normalizePickupLines(JSON.parse(response.choices[0].message.content!));
+  const parsed = JSON.parse(response.choices[0].message.content!);
+  return { lines: normalizePickupLines(parsed), vibe: extractVibe(parsed) };
 }
 
 // IMAGE MODE — raw fallback (manual JSON parse + validation)
 async function fallbackAnalyzeChat(
   frames: string[],
   note?: string,
-): Promise<string[]> {
+): Promise<GenerationResult> {
   const messages = [
     {
       role: "system" as const,
@@ -161,7 +185,7 @@ async function fallbackAnalyzeChat(
   });
   try {
     const parsedJson = JSON.parse(response.choices[0].message.content!);
-    return normalizePickupLines(parsedJson);
+    return { lines: normalizePickupLines(parsedJson), vibe: extractVibe(parsedJson) };
   } catch (error) {
     throw new Error(
       "Try Again - Error parsing JSON response from fallback API",
@@ -172,7 +196,7 @@ async function fallbackAnalyzeChat(
 // TEXT MODE — no screenshot, optional note only (primary: Groq, free + fast)
 async function generatePickupLines(
   formData: FormInputProps,
-): Promise<string[]> {
+): Promise<GenerationResult> {
   const note = formData.crushDescription?.trim() || "";
   const direct = await groq.chat.completions.create({
     model: "openai/gpt-oss-120b",
@@ -189,13 +213,15 @@ async function generatePickupLines(
     max_tokens: 4000,
     temperature: 1,
   });
-  return normalizePickupLines(JSON.parse(direct.choices[0].message.content!));
+  return {
+    lines: normalizePickupLines(JSON.parse(direct.choices[0].message.content!)),
+  };
 }
 
 // TEXT MODE — Gemini fallback (raw JSON mode, parsed + validated manually)
 async function fallbackGeneratePickupLines(
   formData: FormInputProps,
-): Promise<string[]> {
+): Promise<GenerationResult> {
   const note = formData.crushDescription?.trim() || "";
   const response = await gemini.chat.completions.create({
     model: "gemini-3.1-flash-lite",
@@ -227,7 +253,7 @@ async function fallbackGeneratePickupLines(
   });
   try {
     const parsedJson = JSON.parse(response.choices[0].message.content!);
-    return normalizePickupLines(parsedJson);
+    return { lines: normalizePickupLines(parsedJson) };
   } catch (error) {
     throw new Error(
       "Try Again - Error parsing JSON response from fallback API",
@@ -241,7 +267,7 @@ async function fallbackGeneratePickupLines(
 // rejections when the eager fallback rejected first.
 async function generatePickupLinesWithFallback(
   params: GenerationParams,
-): Promise<string[]> {
+): Promise<GenerationResult> {
   const frames = parseChatFrames(params.initialFormState.chatFrames);
   const inImageMode = frames.length > 0;
 
@@ -252,7 +278,7 @@ async function generatePickupLinesWithFallback(
           params.initialFormState.crushDescription,
         )
       : await generatePickupLines(params.initialFormState);
-    if (Array.isArray(result) && result.length > 0) {
+    if (result.lines.length > 0) {
       return result;
     }
   } catch (error) {
@@ -266,11 +292,7 @@ async function generatePickupLinesWithFallback(
     ? await fallbackAnalyzeChat(frames, params.initialFormState.crushDescription)
     : await fallbackGeneratePickupLines(params.initialFormState);
 
-  if (
-    !fallbackResult ||
-    !Array.isArray(fallbackResult) ||
-    fallbackResult.length === 0
-  ) {
+  if (!fallbackResult.lines || fallbackResult.lines.length === 0) {
     throw new Error("No pickup lines were generated");
   }
 
@@ -294,12 +316,13 @@ export async function generateOutput(
   }
 
   try {
-    const listPickupLines = await generatePickupLinesWithFallback({
+    const result = await generatePickupLinesWithFallback({
       initialFormState: validatedInputs.data,
     });
     return {
       message: "success",
-      pickupLines: listPickupLines,
+      pickupLines: result.lines,
+      vibe: result.vibe,
       InitialFormState: validatedInputs.data,
     };
   } catch (e) {
@@ -328,18 +351,21 @@ export async function regenerateOutput(
       return {
         message: "error",
         pickupLines: prevState.pickupLines,
+        vibe: prevState.vibe,
         InitialFormState: prevState.InitialFormState,
         errors: `${error}. Try again at ${new Date(reset).toLocaleTimeString()}`,
       };
     }
 
-    const listPickupLines = await generatePickupLinesWithFallback({
+    const result = await generatePickupLinesWithFallback({
       initialFormState: prevState.InitialFormState,
     });
 
     return {
       message: "success",
-      pickupLines: listPickupLines,
+      pickupLines: result.lines,
+      // Same chat, same vibe — keep the analysis we already showed.
+      vibe: result.vibe ?? prevState.vibe,
       InitialFormState: prevState.InitialFormState,
     };
   } catch (e) {
@@ -347,6 +373,7 @@ export async function regenerateOutput(
     return {
       message: "error",
       pickupLines: prevState.pickupLines, // Keep the previous pickup lines
+      vibe: prevState.vibe,
       InitialFormState: prevState.InitialFormState,
       errors: e instanceof Error ? e.message : "Unknown error occurred",
     };

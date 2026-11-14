@@ -37,6 +37,7 @@ function PickupLineGenerator() {
       ) : (
         <OutputForm
           pickupLines={state.pickupLines}
+          vibe={state.vibe}
           InitialFormState={state.InitialFormState}
         />
       )}

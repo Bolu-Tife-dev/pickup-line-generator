@@ -10,6 +10,22 @@ interface GenerationParams {
   initialFormState: FormInputProps;
 }
 
+// Tone of the uploaded chat conversation, read off the screenshots/recording
+// by the vision model before it writes the replies.
+interface ChatVibe {
+  // Short label: "Cold", "Nonchalant", "Flirty", "Calm", "Mixed", ...
+  mood: string;
+  // 1-2 sentence explanation referencing what actually happens in the chat
+  summary: string;
+}
+
+// What a generation call hands back: always the lines, plus the vibe when the
+// input was a chat screenshot/screen recording (text mode has no chat to read).
+interface GenerationResult {
+  lines: string[];
+  vibe?: ChatVibe;
+}
+
 interface GenerateButtonProps {
   className?: string;
   text?: string;
@@ -27,6 +43,7 @@ interface GenerateOutputProps {
 interface GenerateOutputState {
   message: string;
   pickupLines?: string[];
+  vibe?: ChatVibe;
   InitialFormState?: FormInputProps;
   errors?: any;
   data?: any;
@@ -34,5 +51,6 @@ interface GenerateOutputState {
 
 interface FormOutputProps {
   pickupLines: string[];
+  vibe?: ChatVibe;
   InitialFormState?: FormInputProps;
 }
