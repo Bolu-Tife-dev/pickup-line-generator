@@ -8,7 +8,17 @@ const results = [];
 const browser = await puppeteer.launch({
   executablePath: EDGE,
   headless: "new",
-  args: ["--no-sandbox", "--disable-dev-shm-usage"],
+  args: [
+    "--no-sandbox",
+    "--disable-dev-shm-usage",
+    // Optional: pin the prod alias to a known-good edge IP (some ISPs have
+    // transient routing issues with individual Vercel anycast IPs).
+    ...(process.env.PINNED_IP
+      ? [
+          `--host-resolver-rules=MAP pickup-line-generator-tau.vercel.app ${process.env.PINNED_IP}`,
+        ]
+      : []),
+  ],
 });
 
 async function openPage() {
