@@ -1,6 +1,5 @@
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
-import { createClient } from "./supabase/server";
 
 // Only build the limiter when Upstash is actually configured; when the user
 // hasn't signed up for Upstash yet, rate limiting degrades to "always allow"
@@ -21,9 +20,7 @@ const ratelimit = isRedisConfigured
   : null;
 
 export async function rateLimiter() {
-  // userId from supabase AUTH
-  const supabase = createClient();
-
+  // The app is auth-free (no user ids) — one shared bucket for all traffic.
   if (!ratelimit) {
     console.warn("Upstash is not configured — skipping rate limiting");
     return {
@@ -35,18 +32,8 @@ export async function rateLimiter() {
     };
   }
 
-  const { data, error } = await supabase.auth.getUser();
-  if (error) {
-    throw new Error("Failed to get user");
-  }
-
-  if (!data.user?.id) {
-    throw new Error("User ID not found");
-  }
-
-  const identifier = data.user?.id!;
   const { success, limit, remaining, reset } =
-    await ratelimit.limit(identifier);
+    await ratelimit.limit("global");
 
   return {
     success,

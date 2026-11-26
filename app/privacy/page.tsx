@@ -24,10 +24,9 @@ export default function PrivacyPage() {
           <section className="space-y-2">
             <h2 className="text-xl font-semibold">What we collect</h2>
             <p>
-              When you sign in with Google, we receive your basic Google
-              account profile (name and email address) through Supabase Auth
-              so we can identify you. We do not see or store your Google
-              password.
+              We don&apos;t require an account and we don&apos;t collect any
+              personal information from you — no sign-up, no profile, no
+              email. You just open the app and use it.
             </p>
           </section>
 
@@ -56,16 +55,16 @@ export default function PrivacyPage() {
           <section className="space-y-2">
             <h2 className="text-xl font-semibold">Cookies</h2>
             <p>
-              The only cookies we use are the ones needed to keep you signed
-              in. We do not use advertising or tracking cookies.
+              We don&apos;t use cookies at all — no sign-in sessions, no
+              advertising, no cross-site tracking.
             </p>
           </section>
 
           <section className="space-y-2">
             <h2 className="text-xl font-semibold">Your data</h2>
             <p>
-              We do not sell your personal data. If you would like your
-              account deleted, contact us and we will remove it promptly.
+              We do not sell your personal data. Since we don&apos;t store
+              personal data, there is nothing on file to delete on request.
             </p>
           </section>
 

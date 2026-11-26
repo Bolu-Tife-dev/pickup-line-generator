@@ -41,11 +41,11 @@ export default function TermsPage() {
           </section>
 
           <section className="space-y-2">
-            <h2 className="text-xl font-semibold">Your account</h2>
+            <h2 className="text-xl font-semibold">Fair use</h2>
             <p>
-              You sign in with your Google account and are responsible for
-              keeping access to it secure. Don&apos;t share your account with
-              others to abuse the service.
+              The app is free and powered by limited free-tier AI services.
+              Please keep it to personal use and don&apos;t abuse it with
+              automated or heavy traffic.
             </p>
           </section>
 

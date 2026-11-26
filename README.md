@@ -12,7 +12,7 @@ Upload a screenshot of your chat — the AI reads the vibe and writes your perfe
 <a href="https://github.com/Bolu-Tife-dev/pickup-line-generator"><strong>Explore the docs »</strong></a>
 <br/>
 <br/>
-<a href="https://pickup-line-generator.vercel.app">View Demo</a> ·
+<a href="https://pickup-line-generator-tau.vercel.app">View Demo</a> ·
 <a href="https://github.com/Bolu-Tife-dev/pickup-line-generator/issues">Report Bug</a> ·
 <a href="https://github.com/Bolu-Tife-dev/pickup-line-generator/issues">Request Feature</a>
 </p>
@@ -30,7 +30,7 @@ Key features:
 - Text mode — describe your crush and choose a style for two tailored pickup lines
 - AI generation via Groq (primary) and Google Gemini (fallback), both free tier, through the OpenAI-compatible SDK
 - Responsive design for seamless use on desktop and mobile devices
-- Secure authentication with Supabase and OAuth (Google)
+- No account required — open the app and generate (single-user, auth-free)
 
 ## Built With
 
@@ -40,7 +40,6 @@ This project is built using modern web technologies and frameworks:
 - [TypeScript](https://www.typescriptlang.org/) for type checking, safety, and code organization
 - [Tailwind CSS](https://tailwindcss.com/) for styling and responsive design
 - [Shadcn UI](https://ui.shadcn.com/) for the beautiful UI components
-- [Supabase](https://supabase.io/) for authentication services
 - [Groq](https://console.groq.com/) for fast, free text generation (primary)
 - [Google Gemini](https://aistudio.google.com/) for chat-screenshot vision analysis and text fallback
 - [OpenAI SDK](https://openai.com/) as the OpenAI-compatible client used to call both providers
@@ -85,11 +84,10 @@ To get a local copy up and running, follow these simple steps.
 ## Usage
 
 1. Open the application in your web browser
-2. Sign in using your Google account
-3. Upload a screenshot or screen recording of your chat, and/or add a note giving the AI extra context
-4. Click the "Write My Perfect Reply" button
-5. Read the chat vibe the AI reports first (Cold, Nonchalant, Flirty, Calm, …), then copy your two replies
-6. Hit "Regenerate Pickup Line" whenever you want a fresh pair (rate limited)
+2. Upload a screenshot or screen recording of your chat, and/or add a note giving the AI extra context
+3. Click the "Write My Perfect Reply" button
+4. Read the chat vibe the AI reports first (Cold, Nonchalant, Flirty, Calm, …), then copy your two replies
+5. Hit "Regenerate Pickup Line" whenever you want a fresh pair (rate limited)
 
 ## Roadmap
 
@@ -121,5 +119,4 @@ Project Link: [https://github.com/Bolu-Tife-dev/pickup-line-generator](https://g
 - Originally created by Arghya Dutta ([@Arghyad18](https://twitter.com/Arghyad18)) — [NemesisLW/pickup-line-generator](https://github.com/NemesisLW/pickup-line-generator)
 - [1811 Labs](https://bento.me/1811labs) for the assignment
 - [Vercel](https://vercel.com/) for hosting and deployment
-- [Supabase](https://supabase.io/) for authentication services
 - [Shadcn UI](https://ui.shadcn.com/) for the beautiful UI components
